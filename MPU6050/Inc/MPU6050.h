@@ -2,6 +2,7 @@
 #define MPU6050_H
 
 #include "stm32f1xx_hal.h"  // 根据实际芯片修改
+#include "bsp_dwt.h"
 
 // ========== MPU6050 寄存器定义 ==========
 #define MPU6050_ADDR_DEFAULT     0xD0    // 0x68 << 1 (AD0=0)
@@ -44,6 +45,9 @@
 #define MPU6050_DMA_MAX_LEN      14
 #define MPU6050_I2C_TIMEOUT_MS   10
 
+// 零偏校准采样次数（建议500~1000）
+#define MPU6050_CALIB_SAMPLES    1000
+
 // ========== 数据结构 ==========
 typedef struct {
     int16_t accel[3];
@@ -77,6 +81,8 @@ public:
     // 多字节读取（DMA，需在CubeMX中使能I2C的DMA）
     HAL_StatusTypeDef readMultiRegDMA(uint8_t reg, uint8_t* buf, uint8_t len);
 
+    bool calibrate(uint16_t samples);
+
     // 检查设备是否在线
     bool isConnected();
 
@@ -94,6 +100,8 @@ private:
     MPU6050_RawData raw_;
     MPU6050_RealData real_;
 
+    float gyro_offset_[3];      // °/s
+    float accel_offset_[3];     // g
     // DMA 完成标志（若使用DMA）
 
 

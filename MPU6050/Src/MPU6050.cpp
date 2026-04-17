@@ -9,13 +9,69 @@ static MPU6050 mpu6050_instance(&hi2c1, MPU6050_ADDR_DEFAULT);
 // ========== 构造函数 ==========
 MPU6050::MPU6050(I2C_HandleTypeDef* hi2c, uint8_t i2c_addr)
     : hi2c_(hi2c), i2c_addr_(i2c_addr), dma_done_(0), dma_error_(0) {
+    for (int i = 0; i < 3; i++) {
+        gyro_offset_[i] = 0.0f;
+        accel_offset_[i] = 0.0f;
+    }
 }
 
 // ========== 初始化公共接口 ==========
 uint8_t MPU6050::init() {
-    return sensorInit();
+    uint8_t ret = sensorInit();
+    if (ret != MPU6050_NO_ERROR) {
+        return ret;
+    }
+
+    // ⚠️ 重要：等待传感器内部稳定（配置生效）
+    DWT_Delay_ms(200);   // 移到校准之前
+
+    // 执行零偏校准
+    bool calib_ok = calibrate(MPU6050_CALIB_SAMPLES);
+    if (!calib_ok) {
+        return MPU6050_I2C_ERROR;
+    }
+    return MPU6050_NO_ERROR;
 }
 
+bool MPU6050::calibrate(uint16_t samples) {
+
+    if (samples == 0) return false;
+
+    // 调试：先读一次 WHO_AM_I 确认 I2C 正常
+    uint8_t whoami = 0;
+    if (readReg(MPU6050_WHO_AM_I, &whoami) != HAL_OK || whoami != 0x70) {
+        // 这里可以加入断点或 LED 闪烁提示 I2C 失败
+        return false;
+    }
+
+    double sum_gyro[3] = {0.0, 0.0, 0.0};
+    double sum_accel[3] = {0.0, 0.0, 0.0};
+
+    for (uint16_t i = 0; i < samples; i++) {
+        if (!readRawData()) {
+            return false;
+        }
+        sum_gyro[0] += raw_.gyro[0];
+        sum_gyro[1] += raw_.gyro[1];
+        sum_gyro[2] += raw_.gyro[2];
+        sum_accel[0] += raw_.accel[0];
+        sum_accel[1] += raw_.accel[1];
+        sum_accel[2] += raw_.accel[2];
+
+        DWT_Delay_ms(1);   // 约 1ms 采样间隔
+    }
+
+    float inv_samples = 1.0f / samples;
+    gyro_offset_[0] = (float)(sum_gyro[0] * inv_samples) * MPU6050_GYRO_250DPS_SEN;
+    gyro_offset_[1] = (float)(sum_gyro[1] * inv_samples) * MPU6050_GYRO_250DPS_SEN;
+    gyro_offset_[2] = (float)(sum_gyro[2] * inv_samples) * MPU6050_GYRO_250DPS_SEN;
+
+    accel_offset_[0] = (float)(sum_accel[0] * inv_samples) * MPU6050_ACCEL_2G_SEN;
+    accel_offset_[1] = (float)(sum_accel[1] * inv_samples) * MPU6050_ACCEL_2G_SEN;
+    accel_offset_[2] = (float)(sum_accel[2] * inv_samples) * MPU6050_ACCEL_2G_SEN - 1.0f;
+
+    return true;
+}
 // ========== 传感器初始化（内部） ==========
 uint8_t MPU6050::sensorInit() {
     uint8_t who_am_i = 0;
@@ -23,19 +79,19 @@ uint8_t MPU6050::sensorInit() {
 
     // 1. 检查设备是否存在
     status = readReg(MPU6050_WHO_AM_I, &who_am_i);
-    if (status != HAL_OK || who_am_i != 0x68) {
+    if (status != HAL_OK || who_am_i != 0x70) {
         return MPU6050_NO_SENSOR;
     }
 
     // 2. 软件复位
     status = writeReg(MPU6050_PWR_MGMT_1, MPU6050_RESET_VALUE);
     if (status != HAL_OK) return MPU6050_I2C_ERROR;
-    HAL_Delay(100);  // 等待复位完成
+    DWT_Delay_ms(100);   // 使用 DWT 延时
 
     // 3. 唤醒并设置时钟源
     status = writeReg(MPU6050_PWR_MGMT_1, MPU6050_WAKE_VALUE);
     if (status != HAL_OK) return MPU6050_PWR_ERROR;
-    HAL_Delay(10);
+    DWT_Delay_ms(10);
 
     // 4. 禁用所有轴待机（PWR_MGMT_2=0x00）
     status = writeReg(MPU6050_PWR_MGMT_2, 0x00);
@@ -64,7 +120,7 @@ uint8_t MPU6050::sensorInit() {
 bool MPU6050::isConnected() {
     uint8_t who_am_i = 0;
     HAL_StatusTypeDef status = readReg(MPU6050_WHO_AM_I, &who_am_i);
-    return (status == HAL_OK && who_am_i == 0x68);
+    return (status == HAL_OK && who_am_i == 0x70);
 }
 
 // ========== 单字节写寄存器 ==========
@@ -126,14 +182,16 @@ bool MPU6050::readRawData() {
 
 // ========== 数据转换 ==========
 void MPU6050::convertData() {
-    real_.accel[0] = raw_.accel[0] * MPU6050_ACCEL_2G_SEN;
-    real_.accel[1] = raw_.accel[1] * MPU6050_ACCEL_2G_SEN;
-    real_.accel[2] = raw_.accel[2] * MPU6050_ACCEL_2G_SEN;
+    real_.accel[0] = raw_.accel[0] * MPU6050_ACCEL_2G_SEN - accel_offset_[0];
+    real_.accel[1] = raw_.accel[1] * MPU6050_ACCEL_2G_SEN - accel_offset_[1];
+    real_.accel[2] = raw_.accel[2] * MPU6050_ACCEL_2G_SEN - accel_offset_[2];
 
-    real_.gyro[0] = raw_.gyro[0] * MPU6050_GYRO_250DPS_SEN;
-    real_.gyro[1] = raw_.gyro[1] * MPU6050_GYRO_250DPS_SEN;
-    real_.gyro[2] = raw_.gyro[2] * MPU6050_GYRO_250DPS_SEN;
+    // 陀螺仪转换并减去零偏
+    real_.gyro[0] = raw_.gyro[0] * MPU6050_GYRO_250DPS_SEN - gyro_offset_[0];
+    real_.gyro[1] = raw_.gyro[1] * MPU6050_GYRO_250DPS_SEN - gyro_offset_[1];
+    real_.gyro[2] = raw_.gyro[2] * MPU6050_GYRO_250DPS_SEN - gyro_offset_[2];
 
+    // 温度转换（无需零偏）
     real_.temp = raw_.temp * MPU6050_TEMP_FACTOR + MPU6050_TEMP_OFFSET;
 }
 

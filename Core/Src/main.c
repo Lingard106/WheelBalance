@@ -97,7 +97,7 @@ int main(void)
   MX_I2C1_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  MPU6050_Init();
+  //MPU6050_Init();
 
   /* USER CODE END 2 */
 

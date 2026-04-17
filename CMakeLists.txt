@@ -41,7 +41,19 @@ add_executable(${CMAKE_PROJECT_NAME}
         BSP/Inc/bsp_dwt.h
         BSP/Src/bsp_dwt.cpp
         Debug_Vars/debug_vars.cpp
-        Debug_Vars/debug_vars.h)
+        Debug_Vars/debug_vars.h
+        task/TaskBase.h
+        task/Inc/MPU6050_read.h
+        task/Src/MPU6050_read.cpp
+        Algorithm/Inc/CRC8.h
+        Algorithm/Src/CRC8.cpp
+        Algorithm/Src/CRC16.cpp
+        Algorithm/Inc/CRC16.h
+        Algorithm/Inc/FusionAHRS.h
+        Algorithm/Inc/MahonyAHRS.h
+        Algorithm/Src/FusionAHRS.cpp
+        Algorithm/Src/MahonyAHRS.c
+)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -66,6 +78,15 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
         BSP/Inc
         BSP/Src
         Debug_Vars
+        task
+        task/Inc
+        task/Src
+        Serial
+        Serial/Inc
+        Serial/Src
+        Algorithm
+        Algorithm/Src
+        Algorithm/Inc
 )
 
 # Add project symbols (macros)
