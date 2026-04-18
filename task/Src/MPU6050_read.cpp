@@ -44,6 +44,9 @@ void MPU6050ReadTask::run()
     float gyro[3], accel[3];
     float q[4];           // 四元数
 
+
+
+
     for (;;)
     {
         MPU6050_Read(gyro,accel,&temp);

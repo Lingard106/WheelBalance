@@ -29,6 +29,7 @@
 #include "MPU6050.h"
 #include "debug_vars.h"
 #include "bsp_dwt.h"
+#include "tcrt.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,7 +62,11 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+// // 注意：请将此回调放在 stm32f1xx_it.c 或统一的中断处理文件中，且只保留一份！
+// void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+//   tcrt_instance.handleInterrupt(GPIO_Pin);
+//   // 如有其他引脚中断，可在此添加 else if 分支
+// }
 /* USER CODE END 0 */
 
 /**
